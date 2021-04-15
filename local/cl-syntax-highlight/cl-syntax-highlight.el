@@ -1,19 +1,23 @@
-;; TODO: add a similar function to work with `labels', `flet' and `macrolet'
-(defun clsh/match-with-labels (bound)
-  (when (re-search-forward "(\\(with-labels\\)" bound t)
-    (let ((start (match-beginning 0))
-          (end (match-end 0))
-          (parse-sexp-ignore-comments t)) ; important to ignore lists within comments
-      ;; skip the first expression in the `with-labels' call (as it is not a function)
-      (goto-char (scan-sexps end 1))
-      (let ((functions (--clsh/collect-local-functions-bounds)))
-        (set-match-data
-         (append
-          (list start end start end)
-          (nreverse functions)
-          (list (current-buffer)))))
-      (goto-char end)
-      t)))
+;; TODO: these utilities seem generally useful for other Emacs-related tasks,
+;;       move them out to a separate file.
+(defmacro goto-end-of-next-sexp ()
+  `(goto-end-of-sexp-after (point)))
+
+(defmacro goto-end-of-sexp-after (location)
+  `(goto-char (scan-sexps ,location 1)))
+
+(defmacro go-into-next-list ()
+  `(goto-char (scan-lists (point) 1 -1)))
+
+(defmacro when-bind (forms &rest body)
+  (declare (indent defun))
+  (let ((variables (mapcar #'car forms)))
+    `(let ,forms
+       (when (and ,@variables)
+         ,@body))))
+
+(defmacro when-bound-return-true (forms &rest body)
+  `(when-bind ,forms (progn ,@body t)))
 
 (defmacro --clsh/until-error-happens (&rest body)
   (declare (indent defun))
@@ -25,19 +29,34 @@
          (error
           (throw ',done nil))))))
 
+;; TODO: add a similar function to work with `labels', `flet' and `macrolet'
+(defun clsh/match-with-labels (bound)
+  (when (re-search-forward "(\\(with-labels\\)" bound t)
+    (let ((start (match-beginning 0))
+          (end (match-end 0))
+          (parse-sexp-ignore-comments t)) ; important to ignore lists within comments
+      ;; skip the first expression in the `with-labels' call (as it is not a function)
+      (goto-end-of-sexp-after end)
+      (when-bound-return-true ((functions (--clsh/collect-local-functions-bounds)))
+        (set-match-data
+         (append
+          (list start end start end)
+          (nreverse functions)
+          (list (current-buffer))))))))
+
 (defun --clsh/collect-local-functions-bounds ()
   (let ((local-functions (list)))
     (--clsh/until-error-happens
       (save-excursion
         ;; go inside the next local function
-        (goto-char (scan-lists (point) 1 -1))
+        (go-into-next-list)
         ;; extract the local function name bounds
         (let ((fn-name-start (point))
-              (fn-name-end (scan-sexps (point) 1)))
+              (fn-name-end (goto-end-of-next-sexp)))
           (push fn-name-start local-functions)
           (push fn-name-end local-functions)))
       ;; advance to the next local function
-      (goto-char (scan-sexps (point) 1)))
+      (goto-end-of-next-sexp))
     local-functions))
 
 (add-hook 'lisp-mode-hook
