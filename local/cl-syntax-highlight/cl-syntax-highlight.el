@@ -1,16 +1,12 @@
 ;; TODO: add a similar function to work with `labels', `flet' and `macrolet'
 (defun clsh/match-with-labels (bound)
-  (message "clsh with bound %S" bound)
   (when (re-search-forward "(\\(with-labels\\)" bound t)
     (let ((start (match-beginning 0))
           (end (match-end 0))
           (parse-sexp-ignore-comments t)) ; important to ignore lists within comments
-      (message "parsing for local functions")
       ;; skip the first expression in the `with-labels' call (as it is not a function)
       (goto-char (scan-sexps end 1))
       (let ((functions (--clsh/collect-local-functions-bounds)))
-        (message "found %S functions" (length functions))
-        (message "found functions: %S" functions)
         (set-match-data
          (append
           (list start end start end)
