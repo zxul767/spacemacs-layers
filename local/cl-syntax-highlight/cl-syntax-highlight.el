@@ -57,19 +57,19 @@
   ;; However, we cannot remove the second condition because a direct jump backwards
   ;; (e.g., via `goto-char') might trigger fontification in a "window" whose end
   ;; is outside the `with-labels' form, but whose beginning is actually inside.
-  (let ((bounds (or (--clsh/inside--with-labels font-lock-end)
+  (let ((bounds (or (--clsh/inside--with-labels font-lock-end :upper-bound font-lock-beg)
                     (--clsh/inside--with-labels font-lock-beg))))
     (if bounds
         (setf font-lock-beg (min (first bounds) font-lock-beg)
               font-lock-end (max (second bounds) font-lock-end)))))
 
-(defun --clsh/inside--with-labels (point)
+(cl-defun --clsh/inside--with-labels (point &key upper-bound)
   "Return the bounds of a `with-labels' form if `point' happens to be inside it"
   (save-excursion
     (goto-char point)
     ;; TODO: is this fast enough to guarantee we will not slow down fontification
     ;;       in large files?
-    (when (re-search-backward "(\\(with-labels\\)" nil t)
+    (when (re-search-backward "(\\(with-labels\\)" upper-bound t)
       (let* ((start (match-beginning 0))
              ;; TODO: review the failure conditions for `scan-sexps' and handle
              ;; them properly
