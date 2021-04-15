@@ -44,20 +44,32 @@
           (lambda ()
             (setf font-lock-multiline t)
             (add-hook 'font-lock-extend-region-functions
-                      '--clsh/font-lock-extend-region-for--with-labels)))
+                      '--clsh/try-extend-fontification-region-for--with-labels)))
 
-(defun --clsh/font-lock-extend-region-for--with-labels ()
+(defun --clsh/try-extend-fontification-region-for--with-labels ()
   "Extend the search region to include all functions in a `with-labels' macro"
   ;; Avoid compiler warnings about these global variables from font-lock.el.
   ;; See the documentation for variable `font-lock-extend-region-functions'.
   (eval-when-compile (defvar font-lock-beg) (defvar font-lock-end))
+  (let ((bounds (or (--clsh/inside--with-labels font-lock-beg)
+                    (--clsh/inside--with-labels font-lock-end))))
+    (if bounds
+        (setf font-lock-beg (min (first bounds) font-lock-beg)
+              font-lock-end (max (second bounds) font-lock-end)))))
+
+(defun --clsh/inside--with-labels (point)
+  "Return the bounds of a `with-labels' form if `point' happens to be inside it"
   (save-excursion
-    (goto-char font-lock-beg)
+    (goto-char point)
+    ;; TODO: is this fast enough to guarantee we will not slow down fontification
+    ;;       in large files?
     (when (re-search-backward "(\\(with-labels\\)" nil t)
       (let* ((start (match-beginning 0))
-             (end (scan-sexps start 1))) ; FIXME: what happens if this call fails?
-        (setf font-lock-beg (min start font-lock-beg)
-              font-lock-end (max end font-lock-end))))))
+             ;; TODO: review the failure conditions for `scan-sexps' and handle
+             ;; them properly
+             (end (scan-sexps start 1)))
+        (if (<= start point end)
+            (list start end))))))
 
 ;; TODO: Figure out how to make this work for an arbitrary number of matches.n
 ;; This may work in practice (as most functions/macros don't need that many
